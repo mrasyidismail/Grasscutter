@@ -176,6 +176,7 @@ public class Player implements PlayerHook, FieldFetch {
     @Getter @Setter private Set<Date> moonCardGetTimes;
 
     @Transient @Getter private boolean paused;
+    @Transient @Getter @Setter private Future<?> queuedTeleport;
     @Transient @Getter @Setter private int enterSceneToken;
     @Transient @Getter @Setter private SceneLoadState sceneLoadState = SceneLoadState.NONE;
     @Transient private boolean hasSentLoginPackets;
@@ -1528,6 +1529,31 @@ public class Player implements PlayerHook, FieldFetch {
         //Note: DON'T DELETE BY UID,BECAUSE THERE ARE MULTIPLE SAME UID PLAYERS WHEN DUPLICATED LOGIN!
         //so I decide to delete by object rather than uid
         getServer().getPlayers().values().removeIf(player1 -> player1 == this);
+    }
+
+    public void unfreezeUnlockedScenePoints(int sceneId) {
+        // Unfreeze previously unlocked scene points. For example,
+        // the first weapon mats domain needs some script interaction
+        // to unlock. It needs to be unfrozen when GetScenePointReq
+        // comes in to be interactable again.
+        GameData.getScenePointEntryMap().values().stream()
+                .filter(scenePointEntry ->
+                        // Note: Only DungeonEntry scene points need to be unfrozen
+                        scenePointEntry.getPointData().getType().equals("DungeonEntry")
+                        // groupLimit says this scene point needs to be unfrozen
+                        && scenePointEntry.getPointData().isGroupLimit())
+                .forEach(scenePointEntry -> {
+                        // If this is a previously unlocked scene point,
+                        // send unfreeze packet.
+                        val pointId = scenePointEntry.getPointData().getId();
+                        if (unlockedScenePoints.get(sceneId).contains(pointId)) {
+                            this.sendPacket(new PacketUnfreezeGroupLimitNotify(pointId, sceneId));
+                        }
+                });
+    }
+
+    public void unfreezeUnlockedScenePoints() {
+        unlockedScenePoints.keySet().forEach(sceneId -> unfreezeUnlockedScenePoints(sceneId));
     }
 
     public int getLegendaryKey() {
